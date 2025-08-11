@@ -1,0 +1,324 @@
+import javax.swing.*;
+import javax.swing.border.TitledBorder;
+import javax.swing.table.DefaultTableModel;
+import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
+import java.util.Locale;
+
+public class BissecaoGUI extends JFrame {
+
+    // ---- Inputs principais ----
+    private final JTextField aField = new JTextField("-30");
+    private final JTextField bField = new JTextField("30");
+    private final JTextField tolField = new JTextField("0,0001"); // aceita virgula
+    private final JCheckBox passoCheck = new JCheckBox("Execucao Passo a Passo");
+
+    // ---- Saidas ----
+    private final JLabel resultadoLbl = new JLabel(" ");
+    private final JLabel erroLbl = new JLabel(" ");
+    private final JLabel iterLbl = new JLabel(" ");
+
+    // ---- Botoes ----
+    private final JButton graficoBtn = new JButton("Grafico");
+    private final JButton calculaBtn = new JButton("Calcula >>");
+    private final JButton novoBtn = new JButton("Novo");
+    private final JButton sairBtn = new JButton("Sair");
+    private final JButton reiniciaBtn = new JButton("Reinicia");
+
+    // ---- Tabela ----
+    private final DefaultTableModel model = new DefaultTableModel(
+            new String[]{"Iteracao:", "XA =", "f( XA ) =", "XB =", "f( XB ) =", "XN =", "f( XN ) =", "Erro ="},
+            0
+    ) {
+        @Override public boolean isCellEditable(int r, int c) { return false; }
+    };
+    private final JTable table = new JTable(model);
+
+    // ---- Estado de execucao ----
+    private boolean emExecucao = false;
+    private double left, right, fa, fb; // extremos atuais
+    private double tol;                 // tolerancia
+    private int maxIt = 200;            // limite de seguranca
+    private int itAtual = 0;            // contador
+
+    public BissecaoGUI() {
+        super("Metodo da Bissecao - Polinomios");
+        setDefaultCloseOperation(EXIT_ON_CLOSE);
+        setSize(980, 620);
+        setLocationRelativeTo(null);
+        setLayout(new BorderLayout(8, 8));
+
+        add(buildTopPanel(), BorderLayout.NORTH);
+        add(buildCenterPanel(), BorderLayout.CENTER);
+        add(buildBottomPanel(), BorderLayout.SOUTH);
+
+        // Acoes
+        calculaBtn.addActionListener(this::onCalcular);
+        novoBtn.addActionListener(e -> resetAll());
+        sairBtn.addActionListener(e -> dispose());
+        reiniciaBtn.addActionListener(e -> reiniciarIteracao());
+        graficoBtn.addActionListener(e -> JOptionPane.showMessageDialog(
+                this,
+                "Modulo de grafico ainda nao implementado.",
+                "Grafico",
+                JOptionPane.INFORMATION_MESSAGE
+        ));
+        reiniciaBtn.setEnabled(false);
+    }
+
+    // ---------- UI ----------
+    private JComponent buildTopPanel() {
+        JPanel leftForm = new JPanel(new GridBagLayout());
+        GridBagConstraints gc = new GridBagConstraints();
+        gc.insets = new Insets(4, 6, 4, 6);
+        gc.fill = GridBagConstraints.HORIZONTAL;
+        gc.weightx = 0; gc.gridx = 0; gc.gridy = 0;
+
+        leftForm.add(new JLabel("X inicial (A):"), gc);
+        gc.gridx = 1; gc.weightx = 1; leftForm.add(wrapWithSmallButton(aField), gc);
+
+        gc.gridy = 1; gc.gridx = 0; gc.weightx = 0; leftForm.add(new JLabel("X final (B):"), gc);
+        gc.gridx = 1; gc.weightx = 1; leftForm.add(wrapWithSmallButton(bField), gc);
+
+        gc.gridy = 2; gc.gridx = 0; gc.weightx = 0; leftForm.add(new JLabel("Precisao:"), gc);
+        gc.gridx = 1; gc.weightx = 1; leftForm.add(wrapWithSmallButton(tolField), gc);
+
+        JPanel rightPanel = new JPanel();
+        rightPanel.setLayout(new BoxLayout(rightPanel, BoxLayout.Y_AXIS));
+        passoCheck.setAlignmentX(Component.LEFT_ALIGNMENT);
+        rightPanel.add(passoCheck);
+        rightPanel.add(Box.createVerticalStrut(8));
+        rightPanel.add(rowLabel("Resultado:", resultadoLbl));
+        rightPanel.add(rowLabel("Erro:", erroLbl));
+        rightPanel.add(rowLabel("Iteracao:", iterLbl));
+        rightPanel.add(Box.createVerticalStrut(8));
+
+        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+        buttons.add(graficoBtn);
+        buttons.add(calculaBtn);
+        buttons.add(novoBtn);
+        buttons.add(sairBtn);
+        buttons.add(reiniciaBtn);
+        rightPanel.add(buttons);
+
+        JPanel top = new JPanel(new BorderLayout());
+        top.setBorder(BorderFactory.createEmptyBorder(8, 8, 0, 8));
+        top.add(leftForm, BorderLayout.CENTER);
+        top.add(rightPanel, BorderLayout.EAST);
+        return top;
+    }
+
+    private JPanel buildCenterPanel() {
+        table.setFillsViewportHeight(true);
+        table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+        int[] w = {70, 120, 150, 120, 150, 120, 150, 120};
+        for (int i = 0; i < w.length; i++) table.getColumnModel().getColumn(i).setPreferredWidth(w[i]);
+
+        JScrollPane sp = new JScrollPane(table);
+        sp.setBorder(new TitledBorder("Execucao"));
+        JPanel p = new JPanel(new BorderLayout());
+        p.setBorder(BorderFactory.createEmptyBorder(0, 8, 8, 8));
+        p.add(sp, BorderLayout.CENTER);
+        return p;
+    }
+
+    private JPanel buildBottomPanel() {
+        JTextArea dicas = new JTextArea(
+                "Funcao fixa: f(x) = x^3 - 9x + 3.\n" +
+                        "Criterio de parada: |Xb - Xa|/2 < precisao (Erro exibido = meia-largura do intervalo).\n" +
+                        "No modo Passo a Passo, clique em 'Calcula >>' para avancar as iteracoes."
+        );
+        dicas.setEditable(false);
+        dicas.setLineWrap(true);
+        dicas.setWrapStyleWord(true);
+        dicas.setOpaque(false);
+        JPanel p = new JPanel(new BorderLayout());
+        p.setBorder(BorderFactory.createEmptyBorder(0, 8, 8, 8));
+        p.add(dicas, BorderLayout.CENTER);
+        return p;
+    }
+
+    private JPanel rowLabel(String title, JLabel value) {
+        JPanel p = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        JLabel t = new JLabel(title);
+        t.setPreferredSize(new Dimension(90, 20));
+        value.setPreferredSize(new Dimension(260, 20));
+        p.add(t); p.add(value);
+        return p;
+    }
+
+    private JComponent wrapWithSmallButton(JTextField field) {
+        JPanel p = new JPanel(new BorderLayout(4, 0));
+        p.add(field, BorderLayout.CENTER);
+        JButton b = new JButton("...");
+        b.setMargin(new Insets(2, 6, 2, 6));
+        b.setFocusable(false);
+        b.setToolTipText("Preencher/ajustar valor");
+        b.addActionListener(e -> field.requestFocus());
+        p.add(b, BorderLayout.EAST);
+        return p;
+    }
+
+    // ---------- Handlers ----------
+    private void onCalcular(ActionEvent e) {
+        if (!passoCheck.isSelected()) {
+            executarCompleto();
+        } else {
+            executarPasso();
+        }
+    }
+
+    private void executarCompleto() {
+        resetIterTableAndLabels();
+        if (!prepararIteracao(true)) return;
+
+        int it = 0;
+        while (it < maxIt) {
+            double mid = 0.5 * (left + right);
+            double fm = f(mid);
+            double err = 0.5 * (right - left); // meia-largura
+
+            addRow(it + 1, left, fa, right, fb, mid, fm, err);
+
+            if (err < tol) { // criterio: |Xb - Xa|/2 < tol
+                atualizarLabels(mid, err, it + 1);
+                break;
+            }
+            if (fa * fm <= 0) {
+                right = mid; fb = fm;
+            } else {
+                left = mid;  fa = fm;
+            }
+            it++;
+        }
+        reiniciaBtn.setEnabled(true);
+    }
+
+    private void executarPasso() {
+        if (!emExecucao) {
+            resetIterTableAndLabels();
+            if (!prepararIteracao(false)) return;
+            emExecucao = true;
+            reiniciaBtn.setEnabled(true);
+        }
+        double mid = 0.5 * (left + right);
+        double fm = f(mid);
+        double err = 0.5 * (right - left);
+        addRow(itAtual + 1, left, fa, right, fb, mid, fm, err);
+
+        itAtual++;
+        if (err < tol || itAtual >= maxIt) {
+            atualizarLabels(mid, err, itAtual);
+            emExecucao = false;
+        } else {
+            if (fa * fm <= 0) { right = mid; fb = fm; } else { left = mid; fa = fm; }
+            atualizarLabels(mid, err, itAtual);
+        }
+    }
+
+    private boolean prepararIteracao(boolean requerSinalOposto) {
+        try {
+            double a = parseDoubleFlexible(aField.getText().trim());
+            double b = parseDoubleFlexible(bField.getText().trim());
+            tol = parseDoubleFlexible(tolField.getText().trim());
+            if (tol <= 0) throw new IllegalArgumentException("Precisao deve ser positiva.");
+            if (a >= b) throw new IllegalArgumentException("Exija A < B.");
+
+            left = a; right = b; fa = f(left); fb = f(right);
+            if (requerSinalOposto && fa * fb > 0) {
+                showError("f(A) e f(B) devem ter sinais opostos.");
+                return false;
+            }
+            iterLbl.setText("0");
+            resultadoLbl.setText(" ");
+            erroLbl.setText(" ");
+            itAtual = 0;
+            emExecucao = false;
+            return true;
+        } catch (NumberFormatException ex) {
+            showError("Numero invalido: " + ex.getMessage());
+            return false;
+        } catch (IllegalArgumentException ex) {
+            showError(ex.getMessage());
+            return false;
+        }
+    }
+
+    private void resetAll() {
+        aField.setText("-30");
+        bField.setText("30");
+        tolField.setText("0,0001");
+        passoCheck.setSelected(false);
+        reiniciaBtn.setEnabled(false);
+        emExecucao = false;
+        resetIterTableAndLabels();
+    }
+
+    private void reiniciarIteracao() {
+        emExecucao = false;
+        iterLbl.setText("0");
+        resultadoLbl.setText(" ");
+        erroLbl.setText(" ");
+        model.setRowCount(0);
+    }
+
+    private void resetIterTableAndLabels() {
+        model.setRowCount(0);
+        iterLbl.setText("0");
+        resultadoLbl.setText(" ");
+        erroLbl.setText(" ");
+    }
+
+    private void addRow(int it, double xa, double fa, double xb, double fb, double xn, double fn, double err) {
+        model.addRow(new Object[]{
+                it,
+                fmt(xa), fmt(fa),
+                fmt(xb), fmt(fb),
+                fmt(xn), fmt(fn),
+                fmt(err)
+        });
+    }
+
+    private void atualizarLabels(double x, double err, int it) {
+        resultadoLbl.setText("X = " + fmt(x));
+        erroLbl.setText(fmt(err));
+        iterLbl.setText(String.valueOf(it));
+    }
+
+    // ---------- Funcao alvo ----------
+    // f(x) = x^3 - 9x + 3
+    private static double f(double x) {
+        return x * x * x - 9.0 * x + 3.0;
+    }
+
+    // ---------- Utils ----------
+    private static double parseDoubleFlexible(String s) {
+        s = s.replace(',', '.');
+        return Double.parseDouble(s);
+    }
+
+    private static String fmt(double v) {
+        // virgula decimal, 9 casas; notacao cientifica quando muito pequeno/grande
+        v = (Math.abs(v) < 1e-15 ? 0.0 : v);
+        DecimalFormatSymbols sym = new DecimalFormatSymbols(new Locale("pt", "BR"));
+        sym.setDecimalSeparator(',');
+        sym.setGroupingSeparator('.');
+        DecimalFormat df;
+        if (Math.abs(v) >= 1e9 || (v != 0.0 && Math.abs(v) < 1e-6)) {
+            df = new DecimalFormat("0.############E0", sym);
+        } else {
+            df = new DecimalFormat("0.000000000", sym);
+        }
+        return df.format(v);
+    }
+
+    private void showError(String msg) {
+        JOptionPane.showMessageDialog(this, msg, "Erro", JOptionPane.ERROR_MESSAGE);
+    }
+
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> new BissecaoGUI().setVisible(true));
+    }
+}
