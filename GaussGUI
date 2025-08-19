@@ -1,0 +1,161 @@
+import javax.swing.*;
+import javax.swing.table.DefaultTableModel;
+import java.awt.*;
+import java.util.ArrayList;
+
+public class GaussGUI extends JFrame {
+    private JComboBox<Integer> variaveisCombo;
+    private JTable inputTable;
+    private JPanel etapasPanel;
+    private final int MAX = 6;
+
+    public GaussGUI() {
+        setTitle("Método de Gauss - Eliminação");
+        setSize(800, 600);
+        setLocationRelativeTo(null);
+        setDefaultCloseOperation(DISPOSE_ON_CLOSE);
+        setLayout(new BorderLayout(10, 10));
+
+        JPanel topPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        topPanel.add(new JLabel("Número de variáveis:"));
+        variaveisCombo = new JComboBox<>();
+        for (int i = 2; i <= MAX; i++) variaveisCombo.addItem(i);
+        variaveisCombo.setSelectedIndex(1);
+        topPanel.add(variaveisCombo);
+
+        JButton gerarBtn = new JButton("Gerar Sistema");
+        gerarBtn.addActionListener(e -> gerarTabela());
+        topPanel.add(gerarBtn);
+
+        JButton resolverBtn = new JButton("Resolver");
+        resolverBtn.addActionListener(e -> resolverSistema());
+        topPanel.add(resolverBtn);
+
+        JButton limparBtn = new JButton("Limpar Tudo");
+        limparBtn.addActionListener(e -> limparTudo());
+        topPanel.add(limparBtn);
+
+        add(topPanel, BorderLayout.NORTH);
+
+        inputTable = new JTable();
+        add(new JScrollPane(inputTable), BorderLayout.CENTER);
+
+        etapasPanel = new JPanel();
+        etapasPanel.setLayout(new BoxLayout(etapasPanel, BoxLayout.Y_AXIS));
+        JScrollPane etapasScroll = new JScrollPane(etapasPanel);
+        etapasScroll.setBorder(BorderFactory.createTitledBorder("Etapas"));
+        add(etapasScroll, BorderLayout.SOUTH);
+
+        gerarTabela();
+    }
+
+    private void gerarTabela() {
+        int n = (int) variaveisCombo.getSelectedItem();
+        DefaultTableModel model = new DefaultTableModel(n, n + 1);
+        model.setColumnIdentifiers(colunas(n));
+        inputTable.setModel(model);
+    }
+
+    private String[] colunas(int n) {
+        String[] cols = new String[n + 1];
+        for (int i = 0; i < n; i++) cols[i] = "x" + (i + 1);
+        cols[n] = "= b";
+        return cols;
+    }
+
+    private void resolverSistema() {
+        etapasPanel.removeAll();
+        int n = (int) variaveisCombo.getSelectedItem();
+        double[][] mat = new double[n][n + 1];
+        try {
+            for (int i = 0; i < n; i++) {
+                for (int j = 0; j <= n; j++) {
+                    inputTable.editCellAt(-1, -1); // força término de edição
+                    mat[i][j] = Double.parseDouble(inputTable.getValueAt(i, j).toString());
+                }
+            }
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "Preencha todos os campos com números válidos.", "Erro", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        mostrarEtapa("Etapa 0 (matriz original)", mat, new ArrayList<>());
+
+        ArrayList<String> multiplicadoresUsados = new ArrayList<>();
+        int totalMult = 0;
+
+        for (int k = 0; k < n - 1; k++) {
+            for (int i = k + 1; i < n; i++) {
+                double m = mat[i][k] / mat[k][k];
+                multiplicadoresUsados.add("m[" + i + "][" + k + "] = " + String.format("%.4f", m));
+                totalMult++;
+                for (int j = k; j <= n; j++) {
+                    mat[i][j] -= m * mat[k][j];
+                }
+            }
+            mostrarEtapa("Etapa " + (k + 1), mat, new ArrayList<>(multiplicadoresUsados));
+            multiplicadoresUsados.clear();
+        }
+
+        // Substituição regressiva
+        double[] x = new double[n];
+        for (int i = n - 1; i >= 0; i--) {
+            x[i] = mat[i][n];
+            for (int j = i + 1; j < n; j++) {
+                x[i] -= mat[i][j] * x[j];
+            }
+            x[i] /= mat[i][i];
+        }
+
+        mostrarSolucao(x, totalMult);
+        etapasPanel.revalidate();
+        etapasPanel.repaint();
+    }
+
+    private void mostrarEtapa(String titulo, double[][] mat, ArrayList<String> multiplicadores) {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setBorder(BorderFactory.createTitledBorder(titulo));
+
+        String[] cols = colunas(mat[0].length - 1);
+        DefaultTableModel model = new DefaultTableModel(cols, 0);
+        for (double[] linha : mat) {
+            Object[] row = new Object[linha.length];
+            for (int i = 0; i < linha.length; i++) {
+                row[i] = String.format("%.4f", linha[i]);
+            }
+            model.addRow(row);
+        }
+
+        JTable table = new JTable(model);
+        panel.add(new JScrollPane(table), BorderLayout.CENTER);
+
+        if (!multiplicadores.isEmpty()) {
+            JTextArea multText = new JTextArea();
+            for (String m : multiplicadores) multText.append(m + "\n");
+            multText.setEditable(false);
+            panel.add(multText, BorderLayout.SOUTH);
+        }
+
+        etapasPanel.add(panel);
+    }
+
+    private void mostrarSolucao(double[] x, int totalMult) {
+        JPanel panel = new JPanel();
+        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+        panel.setBorder(BorderFactory.createTitledBorder("Solução Final"));
+
+        for (int i = 0; i < x.length; i++) {
+            panel.add(new JLabel("x" + (i + 1) + " = " + String.format("%.6f", x[i])));
+        }
+
+        panel.add(new JLabel("Multiplicadores utilizados: " + totalMult));
+        etapasPanel.add(panel);
+    }
+
+    private void limparTudo() {
+        gerarTabela();
+        etapasPanel.removeAll();
+        etapasPanel.revalidate();
+        etapasPanel.repaint();
+    }
+}
