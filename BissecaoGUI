@@ -9,25 +9,25 @@ import java.util.Locale;
 
 public class BissecaoGUI extends JFrame {
 
-    // ---- Inputs principais ----
+  
     private final JTextField aField = new JTextField("-30");
     private final JTextField bField = new JTextField("30");
     private final JTextField tolField = new JTextField("0,0001"); // aceita virgula
     private final JCheckBox passoCheck = new JCheckBox("Execucao Passo a Passo");
 
-    // ---- Saidas ----
+    
     private final JLabel resultadoLbl = new JLabel(" ");
     private final JLabel erroLbl = new JLabel(" ");
     private final JLabel iterLbl = new JLabel(" ");
 
-    // ---- Botoes ----
+   
     private final JButton graficoBtn = new JButton("Grafico");
     private final JButton calculaBtn = new JButton("Calcula >>");
     private final JButton novoBtn = new JButton("Novo");
     private final JButton sairBtn = new JButton("Sair");
     private final JButton reiniciaBtn = new JButton("Reinicia");
 
-    // ---- Tabela ----
+   
     private final DefaultTableModel model = new DefaultTableModel(
             new String[]{"Iteracao:", "XA =", "f( XA ) =", "XB =", "f( XB ) =", "XN =", "f( XN ) =", "Erro ="},
             0
@@ -36,7 +36,7 @@ public class BissecaoGUI extends JFrame {
     };
     private final JTable table = new JTable(model);
 
-    // ---- Estado de execucao ----
+   
     private boolean emExecucao = false;
     private double left, right, fa, fb; // extremos atuais
     private double tol;                 // tolerancia
@@ -54,7 +54,7 @@ public class BissecaoGUI extends JFrame {
         add(buildCenterPanel(), BorderLayout.CENTER);
         add(buildBottomPanel(), BorderLayout.SOUTH);
 
-        // Acoes
+        
         calculaBtn.addActionListener(this::onCalcular);
         novoBtn.addActionListener(e -> resetAll());
         sairBtn.addActionListener(e -> dispose());
@@ -68,7 +68,7 @@ public class BissecaoGUI extends JFrame {
         reiniciaBtn.setEnabled(false);
     }
 
-    // ---------- UI ----------
+  
     private JComponent buildTopPanel() {
         JPanel leftForm = new JPanel(new GridBagLayout());
         GridBagConstraints gc = new GridBagConstraints();
@@ -161,7 +161,7 @@ public class BissecaoGUI extends JFrame {
         return p;
     }
 
-    // ---------- Handlers ----------
+   
     private void onCalcular(ActionEvent e) {
         if (!passoCheck.isSelected()) {
             executarCompleto();
@@ -287,13 +287,13 @@ public class BissecaoGUI extends JFrame {
         iterLbl.setText(String.valueOf(it));
     }
 
-    // ---------- Funcao alvo ----------
+   
     // f(x) = x^3 - 9x + 3
     private static double f(double x) {
         return x * x * x - 9.0 * x + 3.0;
     }
 
-    // ---------- Utils ----------
+   
     private static double parseDoubleFlexible(String s) {
         s = s.replace(',', '.');
         return Double.parseDouble(s);
